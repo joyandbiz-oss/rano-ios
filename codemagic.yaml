@@ -33,25 +33,24 @@ workflows:
         script: |
           keychain initialize
 
-      - name: Revoke prior distribution certs (Apple cert quota)
+      - name: Skip cert revoke (preserve other apps' certs)
         script: |
-          set -e
-          echo "Revoking any prior distribution certs to stay under 3-cert Apple limit"
-          app-store-connect certificates list --type IOS_DISTRIBUTION --json > /tmp/certs.json || true
-          if [ -s /tmp/certs.json ]; then
-            python3 -c "
-          import json, sys, subprocess
+          # NOTE: We previously aggressively revoked ALL distribution certs
+          # which broke Vouve/Mocho/Linnea on every Rano build. Apple allows
+          # 3 active distribution certs; only revoke if we hit that wall.
+          # For now we just rely on fetch-signing-files --create to add a
+          # new one or reuse existing.
+          echo "Active distribution certs:"
+          app-store-connect certificates list --type IOS_DISTRIBUTION --json 2>/dev/null | python3 -c "
+          import json, sys
           try:
-            certs = json.load(open('/tmp/certs.json'))
-            for c in certs:
-              cid = c.get('id')
-              if cid:
-                subprocess.run(['app-store-connect', 'certificates', 'delete', cid, '--force'], check=False)
-                print(f'  revoked {cid}')
+            certs = json.load(sys.stdin)
+            print(f'  count: {len(certs)}/3')
+            for c in certs[:5]:
+              print(f\"    {c.get('id')} | {c.get('attributes',{}).get('name','?')}\")
           except Exception as e:
-            print(f'  parse err: {e}')
+            print(f'  list err: {e}')
           " || true
-          fi
 
       - name: Generate certificate private key
         script: |
