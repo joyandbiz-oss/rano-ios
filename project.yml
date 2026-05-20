@@ -1,0 +1,83 @@
+name: Rano
+options:
+  bundleIdPrefix: com.andriibyzov
+  deploymentTarget:
+    iOS: "26.0"
+  developmentLanguage: en
+  groupSortPosition: top
+  createIntermediateGroups: true
+
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    DEVELOPMENT_TEAM: MU58U89PKG
+    MARKETING_VERSION: "0.1"
+    CURRENT_PROJECT_VERSION: "1"
+    ENABLE_USER_SCRIPT_SANDBOXING: NO
+    SWIFT_STRICT_CONCURRENCY: minimal
+    GENERATE_INFOPLIST_FILE: NO
+
+targets:
+  Rano:
+    type: application
+    platform: iOS
+    deploymentTarget: "26.0"
+    sources:
+      - path: App
+      - path: Sources
+      - path: Resources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.andriibyzov.rano
+        PRODUCT_NAME: Rano
+        TARGETED_DEVICE_FAMILY: "1"
+        INFOPLIST_KEY_LSApplicationCategoryType: "public.app-category.lifestyle"
+        INFOPLIST_KEY_CFBundleDisplayName: "Rano"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: "Rano"
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        # Privacy strings — required for permissions:
+        NSAlarmKitUsageDescription: "Rano uses alarms to wake you up reliably, even with Silent or Focus on."
+        NSMotionUsageDescription: "Rano counts your morning steps to confirm you got out of bed."
+        NSHealthShareUsageDescription: "Rano reads your sleep data to soften the alarm after a short night."
+        # No encryption beyond Apple defaults
+        ITSAppUsesNonExemptEncryption: false
+        # iPhone-only
+        UIDeviceFamily:
+          - 1
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+          UISceneConfigurations: {}
+        UILaunchScreen:
+          UIColorName: AccentColor
+        UIRequiredDeviceCapabilities:
+          - arm64
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        UIUserInterfaceStyle: Automatic
+        UIStatusBarStyle: UIStatusBarStyleDefault
+        UIViewControllerBasedStatusBarAppearance: true
+        # Allow background motion processing
+        UIBackgroundModes:
+          - audio
+    entitlements:
+      path: App/Rano.entitlements
+      properties:
+        com.apple.developer.alarmkit: true
+        com.apple.developer.healthkit: true
+
+  RanoTests:
+    type: bundle.unit-test
+    platform: iOS
+    deploymentTarget: "26.0"
+    sources:
+      - path: Tests/RanoTests
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.andriibyzov.rano.tests
+    dependencies:
+      - target: Rano

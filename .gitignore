@@ -1,0 +1,36 @@
+## Xcode
+*.xcodeproj/
+*.xcworkspace/
+xcuserdata/
+DerivedData/
+build/
+
+## XcodeGen
+Rano.xcodeproj
+
+## macOS
+.DS_Store
+
+## Swift Package Manager
+.swiftpm/
+.build/
+Packages/
+Package.resolved
+
+## CocoaPods
+Pods/
+
+## Generated
+*.lock
+Generated/
+
+## Editor
+.vscode/
+.idea/
+*.swp
+
+## Secrets
+*.env
+*.p8
+*.p12
+*.mobileprovision
