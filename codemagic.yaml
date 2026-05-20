@@ -4,21 +4,20 @@ workflows:
     name: Rano — TestFlight upload (Sound Lab playground)
     instance_type: mac_mini_m2
     max_build_duration: 30
+    integrations:
+      app_store_connect: ASC_API_KEY
     environment:
-      groups:
-        - codemagic-credentials  # CM_TEAM, ASC API key set via Codemagic integration
-      # NOTE: ios_signing block REMOVED — Codemagic's pre-flight check fails
-      # for fresh bundle ID with no existing profile. Our script handles
-      # cert+profile creation via app-store-connect-cli below.
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.andriibyzov.rano
       vars:
         APP_STORE_APPLE_ID: "6771270542"
         BUNDLE_ID: "com.andriibyzov.rano"
-        XCODE_WORKSPACE: "Rano.xcodeproj"
+        XCODE_PROJECT: "Rano.xcodeproj"
         XCODE_SCHEME: "Rano"
       xcode: latest
       cocoapods: default
-    integrations:
-      app_store_connect: ASC_API_KEY
+
     scripts:
 
       - name: Install xcodegen
@@ -29,69 +28,11 @@ workflows:
         script: |
           xcodegen generate
 
-      - name: Initialize keychain
-        script: |
-          keychain initialize
-
-      - name: Skip cert revoke (preserve other apps' certs)
-        script: |
-          # NOTE: We previously aggressively revoked ALL distribution certs
-          # which broke Vouve/Mocho/Linnea on every Rano build. Apple allows
-          # 3 active distribution certs; only revoke if we hit that wall.
-          # For now we just rely on fetch-signing-files --create to add a
-          # new one or reuse existing.
-          echo "Active distribution certs:"
-          app-store-connect certificates list --type IOS_DISTRIBUTION --json 2>/dev/null | python3 -c "
-          import json, sys
-          try:
-            certs = json.load(sys.stdin)
-            print(f'  count: {len(certs)}/3')
-            for c in certs[:5]:
-              print(f\"    {c.get('id')} | {c.get('attributes',{}).get('name','?')}\")
-          except Exception as e:
-            print(f'  list err: {e}')
-          " || true
-
-      - name: Generate certificate private key
-        script: |
-          openssl genrsa -out /tmp/cert_key.pem 2048
-
-      - name: Fetch signing files (creates cert + profile if missing)
-        script: |
-          # CRITICAL: --certificate-key requires @file: prefix to read from file
-          # (without it, CLI treats path as literal key value → "No matching
-          # profile" error). Learned from Vouve V1.0.2 marathon — same trap.
-          set +e
-          for attempt in 1 2 3; do
-            app-store-connect fetch-signing-files "$BUNDLE_ID" \
-              --type IOS_APP_STORE \
-              --certificate-key=@file:/tmp/cert_key.pem \
-              --create
-            rc=$?
-            if [ $rc -eq 0 ]; then break; fi
-            echo "fetch-signing-files attempt $attempt failed (rc=$rc); waiting 30s"
-            sleep 30
-          done
-          if [ $rc -ne 0 ]; then
-            echo "All retries failed; aborting"
-            exit $rc
-          fi
-
-      - name: Add certificates to keychain
-        script: |
-          keychain add-certificates
-
-      - name: Set up code signing
-        script: |
-          xcode-project use-profiles
-
       - name: Set build number
         script: |
           set -e
           REMOTE_LATEST=$(app-store-connect get-latest-app-store-build-number "$APP_STORE_APPLE_ID" 2>/dev/null || echo "0")
           NEW_BUILD=$(( REMOTE_LATEST + 1 ))
-          # Use Codemagic's $BUILD_NUMBER (auto-incrementing per build) and
-          # take the max of (remote+1) and Codemagic's BUILD_NUMBER
           if [ "$BUILD_NUMBER" -gt "$NEW_BUILD" ]; then
             NEW_BUILD=$BUILD_NUMBER
           fi
@@ -101,7 +42,7 @@ workflows:
       - name: Build IPA
         script: |
           xcode-project build-ipa \
-            --project "$XCODE_WORKSPACE" \
+            --project "$XCODE_PROJECT" \
             --scheme "$XCODE_SCHEME"
 
     artifacts:
