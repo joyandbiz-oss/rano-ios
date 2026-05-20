@@ -1,0 +1,111 @@
+workflows:
+
+  rano-testflight:
+    name: Rano — TestFlight upload (Sound Lab playground)
+    instance_type: mac_mini_m2
+    max_build_duration: 30
+    environment:
+      groups:
+        - codemagic-credentials  # CM_TEAM, ASC API key set via Codemagic integration
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.andriibyzov.rano
+      vars:
+        APP_STORE_APPLE_ID: "6771270542"
+        BUNDLE_ID: "com.andriibyzov.rano"
+        XCODE_WORKSPACE: "Rano.xcodeproj"
+        XCODE_SCHEME: "Rano"
+      xcode: latest
+      cocoapods: default
+    integrations:
+      app_store_connect: ASC_API_KEY
+    scripts:
+
+      - name: Install xcodegen
+        script: |
+          brew install xcodegen
+
+      - name: Generate Xcode project
+        script: |
+          xcodegen generate
+
+      - name: Initialize keychain
+        script: |
+          keychain initialize
+
+      - name: Revoke prior distribution certs (Apple cert quota)
+        script: |
+          set -e
+          echo "Revoking any prior distribution certs to stay under 3-cert Apple limit"
+          app-store-connect certificates list --type IOS_DISTRIBUTION --json > /tmp/certs.json || true
+          if [ -s /tmp/certs.json ]; then
+            python3 -c "
+          import json, sys, subprocess
+          try:
+            certs = json.load(open('/tmp/certs.json'))
+            for c in certs:
+              cid = c.get('id')
+              if cid:
+                subprocess.run(['app-store-connect', 'certificates', 'delete', cid, '--force'], check=False)
+                print(f'  revoked {cid}')
+          except Exception as e:
+            print(f'  parse err: {e}')
+          " || true
+          fi
+
+      - name: Generate certificate private key
+        script: |
+          openssl genrsa -out /tmp/cert_key.pem 2048
+
+      - name: Fetch signing files (creates cert + profile if missing)
+        script: |
+          set -e
+          for attempt in 1 2 3; do
+            if app-store-connect fetch-signing-files "$BUNDLE_ID" \
+                 --type IOS_APP_STORE \
+                 --create \
+                 --certificate-key=/tmp/cert_key.pem ; then
+              break
+            fi
+            echo "Attempt $attempt failed, sleeping 30s"
+            sleep 30
+          done
+
+      - name: Add certificates to keychain
+        script: |
+          keychain add-certificates
+
+      - name: Set up code signing
+        script: |
+          xcode-project use-profiles
+
+      - name: Set build number
+        script: |
+          set -e
+          REMOTE_LATEST=$(app-store-connect get-latest-app-store-build-number "$APP_STORE_APPLE_ID" 2>/dev/null || echo "0")
+          NEW_BUILD=$(( REMOTE_LATEST + 1 ))
+          # Use Codemagic's $BUILD_NUMBER (auto-incrementing per build) and
+          # take the max of (remote+1) and Codemagic's BUILD_NUMBER
+          if [ "$BUILD_NUMBER" -gt "$NEW_BUILD" ]; then
+            NEW_BUILD=$BUILD_NUMBER
+          fi
+          echo "Remote latest: $REMOTE_LATEST | Codemagic: $BUILD_NUMBER | Using: $NEW_BUILD"
+          agvtool new-version -all $NEW_BUILD
+
+      - name: Build IPA
+        script: |
+          xcode-project build-ipa \
+            --project "$XCODE_WORKSPACE" \
+            --scheme "$XCODE_SCHEME"
+
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.dSYM
+
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
+        beta_groups:
+          - Internal
+        expire_build_submitted_for_review: false
