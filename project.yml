@@ -2,7 +2,7 @@ name: Rano
 options:
   bundleIdPrefix: com.andriibyzov
   deploymentTarget:
-    iOS: "26.0"
+    iOS: "17.0"
   developmentLanguage: en
   groupSortPosition: top
   createIntermediateGroups: true
@@ -21,7 +21,7 @@ targets:
   Rano:
     type: application
     platform: iOS
-    deploymentTarget: "26.0"
+    deploymentTarget: "17.0"
     sources:
       - path: App
       - path: Sources
@@ -72,7 +72,7 @@ targets:
   RanoTests:
     type: bundle.unit-test
     platform: iOS
-    deploymentTarget: "26.0"
+    deploymentTarget: "17.0"
     sources:
       - path: Tests/RanoTests
     settings:
