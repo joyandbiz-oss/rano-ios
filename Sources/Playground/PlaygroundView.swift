@@ -44,7 +44,6 @@ struct PlaygroundView: View {
             VStack(alignment: .leading, spacing: 6) {
                 row("Authorization", controller.authorizationStatus)
                 row("Last sound", controller.lastSound)
-                row("Last state", controller.lastState)
                 if let date = controller.lastFiredAt {
                     row("Fires at", DateFormatter.localizedString(from: date, dateStyle: .none, timeStyle: .medium))
                 }

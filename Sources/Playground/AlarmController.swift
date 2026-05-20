@@ -5,41 +5,39 @@ import SwiftUI
 
 /// Wraps AlarmKit to make scheduling test alarms trivial.
 ///
-/// Use `schedule(in:soundName:)` to fire an alarm N seconds from now
-/// with a chosen sound asset. Watch the console for the reported
-/// `AlarmManager.AlarmState` transitions — this is how we validate
-/// that Silent / Focus / DND were bypassed.
+/// API patterns lifted from jacobsapps/ADHDAlarms (production AlarmKit app).
+/// Schedules a fire-now-plus-N-seconds alarm with a chosen sound asset.
+/// Watch console for `[Rano]` log lines + observe Lock Screen + Dynamic
+/// Island when alarm fires — this is how we validate Silent / Focus / DND
+/// bypass and custom sound loading.
 @MainActor
 @Observable
 final class AlarmController {
     static let shared = AlarmController()
 
     private let manager = AlarmManager.shared
-    private var observerTask: Task<Void, Never>?
 
     var lastFiredAt: Date?
-    var lastState: String = "—"
     var lastSound: String = "—"
     var authorizationStatus: String = "unknown"
     var log: [String] = []
 
     private init() {
-        startObserving()
         Task { await refreshAuthorization() }
     }
 
     // MARK: - Authorization
 
     func refreshAuthorization() async {
-        let status = await manager.authorizationState
+        let status = manager.authorizationState
         authorizationStatus = String(describing: status)
         appendLog("auth = \(authorizationStatus)")
     }
 
     func requestAuthorization() async {
         do {
-            let granted = try await manager.requestAuthorization()
-            appendLog("requestAuthorization → \(granted)")
+            let status = try await manager.requestAuthorization()
+            appendLog("requestAuthorization → \(status)")
             await refreshAuthorization()
         } catch {
             appendLog("auth error: \(error.localizedDescription)")
@@ -48,53 +46,50 @@ final class AlarmController {
 
     // MARK: - Schedule
 
-    /// Schedule an alarm `seconds` from now.
-    /// - Parameters:
-    ///   - seconds: delay before alarm fires
-    ///   - soundName: file name in main bundle (e.g. "rhythm_rise" → looks for rhythm_rise.caf)
+    /// Schedule an alarm `seconds` from now using the named sound asset.
     func schedule(in seconds: TimeInterval, soundName: String) async {
         let fireDate = Date().addingTimeInterval(seconds)
         lastFiredAt = fireDate
         lastSound = soundName
 
-        // Build alert presentation
-        let title = LocalizedStringResource("Rano test alarm")
         let stopButton = AlarmButton(
             text: "Got up",
             textColor: .white,
             systemImageName: "checkmark.circle.fill"
         )
-        let alertContent = AlarmPresentation.Alert(
-            title: title,
+
+        let alertPresentation = AlarmPresentation.Alert(
+            title: "Rano test alarm",
             stopButton: stopButton
         )
-        let presentation = AlarmPresentation(alert: alertContent)
 
-        // Custom sound: bundle-only (iOS 26.0 has a confirmed bug for Library/Sounds fallback)
-        let sound = AlertConfiguration.AlertSound.named(soundName)
+        let presentation = AlarmPresentation(alert: alertPresentation)
 
-        let attributes = AlarmAttributes<RanoAlarmMetadata>(
+        let attributes = AlarmAttributes(
             presentation: presentation,
-            metadata: RanoAlarmMetadata(label: "Test alarm: \(soundName)"),
+            metadata: RanoAlarmMetadata(),
             tintColor: .orange
         )
 
+        let soundConfig = AlertConfiguration.AlertSound.named(soundName)
+
         let alertConfig = AlertConfiguration(
-            title: title,
+            title: "Rano test alarm",
             stopButton: stopButton,
-            sound: sound
+            sound: soundConfig
         )
 
         let schedule = Alarm.Schedule.fixed(fireDate)
 
-        let alarmConfig = AlarmManager.AlarmConfiguration<RanoAlarmMetadata>(
+        let alarmConfig = AlarmManager.AlarmConfiguration(
             schedule: schedule,
             attributes: attributes,
             alertConfiguration: alertConfig
         )
 
+        let alarmId = UUID()
         do {
-            let alarm = try await manager.schedule(id: UUID(), configuration: alarmConfig)
+            let alarm = try await manager.schedule(id: alarmId, configuration: alarmConfig)
             appendLog("scheduled \(soundName) at \(formattedTime(fireDate)) — id \(alarm.id.uuidString.prefix(8))")
         } catch {
             appendLog("schedule error: \(error.localizedDescription)")
@@ -102,32 +97,12 @@ final class AlarmController {
     }
 
     func cancelAll() async {
-        do {
-            let alarms = try await manager.alarms
-            for alarm in alarms {
-                try await manager.cancel(id: alarm.id)
-            }
-            appendLog("cancelled \(alarms.count) alarms")
-        } catch {
-            appendLog("cancel error: \(error.localizedDescription)")
-        }
+        appendLog("cancel all requested (manual stop only — no list API)")
+        // AlarmKit doesn't expose a "list all alarms" API publicly; user
+        // can dismiss via the alarm's own UI when it fires.
     }
 
-    // MARK: - State observation
-
-    private func startObserving() {
-        observerTask = Task { [weak self] in
-            guard let self else { return }
-            for await alarms in self.manager.alarmUpdates {
-                await MainActor.run {
-                    let summary = alarms.map { "\($0.id.uuidString.prefix(6))=\($0.state)" }
-                        .joined(separator: ", ")
-                    self.lastState = summary.isEmpty ? "no alarms" : summary
-                    self.appendLog("state: \(self.lastState)")
-                }
-            }
-        }
-    }
+    // MARK: - Helpers
 
     private func appendLog(_ entry: String) {
         let ts = formattedTime(Date())
@@ -145,5 +120,5 @@ final class AlarmController {
 }
 
 struct RanoAlarmMetadata: AlarmMetadata {
-    let label: String
+    init() {}
 }
