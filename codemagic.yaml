@@ -7,9 +7,9 @@ workflows:
     environment:
       groups:
         - codemagic-credentials  # CM_TEAM, ASC API key set via Codemagic integration
-      ios_signing:
-        distribution_type: app_store
-        bundle_identifier: com.andriibyzov.rano
+      # NOTE: ios_signing block REMOVED — Codemagic's pre-flight check fails
+      # for fresh bundle ID with no existing profile. Our script handles
+      # cert+profile creation via app-store-connect-cli below.
       vars:
         APP_STORE_APPLE_ID: "6771270542"
         BUNDLE_ID: "com.andriibyzov.rano"
