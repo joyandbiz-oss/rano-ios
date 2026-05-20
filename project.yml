@@ -67,7 +67,6 @@ targets:
     entitlements:
       path: App/Rano.entitlements
       properties:
-        com.apple.developer.alarmkit: true
         com.apple.developer.healthkit: true
 
   RanoTests:
